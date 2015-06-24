@@ -44,30 +44,29 @@ func Watch(pathes []string, changed chan string, finish chan bool, finished chan
 		watcher.Add(dir)
 	}
 
-	go func() {
-		for {
-			select {
-			case event := <-watcher.Events:
-				if event.Op&fsnotify.Create == fsnotify.Create || event.Op&fsnotify.Write == fsnotify.Write {
-					if watches(dirs, event.Name) {
-						log.Printf("[watcher] detect modified: %s", event.Name)
-						changed <- event.Name
-					}
-				}
-			case err := <-watcher.Errors:
-				log.Println("[watcher] error:", err)
-			case <-finish:
-				log.Println("[watcher] finishing watching")
-				finished <- true
-				log.Println("==============")
-				err := watcher.Close()
-				if err != nil {
-					log.Printf("[watcher] fail to close: %v", err)
-				}
-			}
-		}
-		log.Println("[watcher] finished watching")
-	}()
+	// for {
+	// 	select {
+	// case event := <-watcher.Events:
+	// 	if event.Op&fsnotify.Create == fsnotify.Create || event.Op&fsnotify.Write == fsnotify.Write {
+	// 		if watches(dirs, event.Name) {
+	// 			log.Printf("[watcher] detect modified: %s", event.Name)
+	// 			changed <- event.Name
+	// 		}
+	// 	}
+	// case err := <-watcher.Errors:
+	// 	log.Println("[watcher] error:", err)
+	// case <-finish:
+	// log.Println("[watcher] finishing watching")
+	// finished <- true
+	// log.Println("==============")
+	// err := watcher.Close()
+	// if err != nil {
+	// 	log.Printf("[watcher] fail to close: %v", err)
+	// }
+	// 	}
+	// }
+
+	log.Println("[watcher] finished watching")
 
 	return nil
 }
