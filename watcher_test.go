@@ -2,6 +2,7 @@ package watcher_test
 
 import (
 	"io/ioutil"
+	"log"
 	"path/filepath"
 	"testing"
 	"time"
@@ -47,7 +48,12 @@ func TestWatch(t *testing.T) {
 		for {
 			select {
 			case event := <-w.Events:
+				log.Println(event)
 				if event.Op&fsnotify.Write == fsnotify.Write {
+					if i > len(tasks) {
+						t.Fatal("should be notified less than %d", len(tasks))
+					}
+
 					task := tasks[i]
 					i++
 
