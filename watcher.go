@@ -1,7 +1,6 @@
 package watcher
 
 import (
-	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -10,8 +9,24 @@ import (
 	"gopkg.in/minodisk/go-walker.v1"
 )
 
-func Watch(pathes []string, changed chan string, finish chan bool, finished chan bool) (err error) {
-	watcher, err := fsnotify.NewWatcher()
+type Watcher struct {
+	Events    chan fsnotify.Event
+	Errors    chan error
+	fswatcher *fsnotify.Watcher
+	done      chan bool
+}
+
+func NewWatcher() *Watcher {
+	w := Watcher{
+		Events: make(chan fsnotify.Event),
+		Errors: make(chan error),
+		done:   make(chan bool),
+	}
+	return &w
+}
+
+func (w *Watcher) Watch(pathes []string) (err error) {
+	w.fswatcher, err = fsnotify.NewWatcher()
 	if err != nil {
 		return err
 	}
@@ -39,36 +54,31 @@ func Watch(pathes []string, changed chan string, finish chan bool, finished chan
 
 	var dirs []string
 	for dir, _ := range dirBoolMap {
-		log.Printf("[watcher] start watching dir: %s", dir)
 		dirs = append(dirs, dir)
-		watcher.Add(dir)
+		w.fswatcher.Add(dir)
 	}
 
-	for {
-		select {
-		case event := <-watcher.Events:
-			if event.Op&fsnotify.Create == fsnotify.Create || event.Op&fsnotify.Write == fsnotify.Write {
+	go func() {
+		for {
+			select {
+			case event := <-w.fswatcher.Events:
 				if watches(dirs, event.Name) {
-					log.Printf("[watcher] detect modified: %s", event.Name)
-					changed <- event.Name
+					w.Events <- event
 				}
-			}
-		case err := <-watcher.Errors:
-			log.Println("[watcher] error:", err)
-		case <-finish:
-			log.Println("[watcher] finishing watching")
-			finished <- true
-			log.Println("==============")
-			err := watcher.Close()
-			if err != nil {
-				log.Printf("[watcher] fail to close: %v", err)
+			case err := <-w.fswatcher.Errors:
+				w.Errors <- err
+			case <-w.done:
+				return
 			}
 		}
-	}
-
-	log.Println("[watcher] finished watching")
+	}()
 
 	return nil
+}
+
+func (w *Watcher) Close() error {
+	close(w.done)
+	return w.fswatcher.Close()
 }
 
 func watches(dirs []string, filename string) bool {

@@ -1,51 +1,71 @@
 package watcher_test
 
 import (
-	"log"
+	"io/ioutil"
+	"path/filepath"
 	"testing"
+	"time"
+
+	"gopkg.in/fsnotify.v1"
 
 	"github.com/minodisk/go-watcher"
 )
 
+type Task struct {
+	Text     string
+	Filename string
+	Duration time.Duration
+}
+
 func TestWatch(t *testing.T) {
-	// go func() {
-	// 	time.Sleep(time.Second * 1)
-	// 	err := ioutil.WriteFile("fixtures/foo", []byte("foo"), 0644)
-	// 	if err != nil {
-	// 		t.Fatal(err)
-	// 	}
-	// }()
+	tasks := []*Task{
+		&Task{"foo", "fixtures/foo", time.Second * 1},
+		&Task{"baz", "fixtures/bar/baz", time.Second * 2},
+		&Task{"quux", "fixtures/bar/qux/quux", time.Second * 3},
+	}
 
-	finished := make(chan bool)
-	changed := make(chan string)
-	finish := make(chan bool)
-
-	go func() {
-		err := watcher.Watch([]string{"fixtures"}, changed, finish, finished)
+	for _, task := range tasks {
+		filename, err := filepath.Abs(task.Filename)
 		if err != nil {
 			t.Fatal(err)
 		}
+		task.Filename = filename
 
+		go func(task *Task) {
+			time.Sleep(task.Duration)
+			err := ioutil.WriteFile(task.Filename, []byte(task.Text), 0644)
+			if err != nil {
+				t.Fatal(err)
+			}
+		}(task)
+	}
+
+	done := make(chan bool)
+	w := watcher.NewWatcher()
+	go func() {
+		i := 0
 		for {
-			// 	select {
-			// 	case filename := <-changed:
-			// 		log.Printf("file changed: %s", filename)
-			// 		target, err := filepath.Abs("fixtures/foo")
-			// 		if err != nil {
-			// 			t.Fatal(err)
-			// 		}
-			// 		log.Println(filename)
-			// 		log.Println(target)
-			// 		if filename == target {
-			// 			log.Println("=====")
-			// 			finish <- true
-			// 			log.Println("-----")
-			// 		}
-			// 	}
-		}
-		// finished <- 1
-	}()
+			select {
+			case event := <-w.Events:
+				if event.Op&fsnotify.Write == fsnotify.Write {
+					task := tasks[i]
+					i++
 
-	<-finished
-	log.Println("done!!")
+					actual := event.Name
+					expected := task.Filename
+					if actual == expected {
+						if i == 3 {
+							w.Close()
+							done <- true
+							return
+						}
+					} else {
+						t.Errorf("filename is expected %s, but actual %s", expected, actual)
+					}
+				}
+			}
+		}
+	}()
+	w.Watch([]string{"fixtures"})
+	<-done
 }
