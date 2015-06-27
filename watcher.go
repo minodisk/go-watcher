@@ -16,7 +16,7 @@ type Watcher struct {
 	done      chan bool
 }
 
-func NewWatcher() *Watcher {
+func New() *Watcher {
 	w := Watcher{
 		Events: make(chan fsnotify.Event),
 		Errors: make(chan error),
@@ -31,38 +31,49 @@ func (w *Watcher) Watch(pathes []string) (err error) {
 		return err
 	}
 
-	dirBoolMap := make(map[string]bool)
-	for i, path := range pathes {
+	targetsMap := make(map[string]bool)
+	dirsMap := make(map[string]bool)
+	filesMap := make(map[string]bool)
+	for _, path := range pathes {
 		path, err = filepath.Abs(path)
 		if err != nil {
 			return err
 		}
-		pathes[i] = path
 		fi, err := os.Stat(path)
 		if err != nil {
-			return err
+			continue
 		}
 		if fi.IsDir() {
 			dirs := walker.FindDirs(path)
 			for _, dir := range dirs {
-				dirBoolMap[dir] = true
+				targetsMap[dir] = true
+				dirsMap[dir] = true
 			}
 		} else {
-			dirBoolMap[filepath.Dir(path)] = true
+			targetsMap[filepath.Dir(path)] = true
+			filesMap[path] = true
 		}
 	}
 
+	// var targets []string
 	var dirs []string
-	for dir, _ := range dirBoolMap {
+	var files []string
+	for target, _ := range targetsMap {
+		// targets = append(targets, target)
+		w.fswatcher.Add(target)
+	}
+	for dir, _ := range dirsMap {
 		dirs = append(dirs, dir)
-		w.fswatcher.Add(dir)
+	}
+	for file, _ := range filesMap {
+		files = append(files, file)
 	}
 
 	go func() {
 		for {
 			select {
 			case event := <-w.fswatcher.Events:
-				if watches(dirs, event.Name) {
+				if watch(dirs, files, event.Name) {
 					w.Events <- event
 				}
 			case err := <-w.fswatcher.Errors:
@@ -81,15 +92,24 @@ func (w *Watcher) Close() error {
 	return w.fswatcher.Close()
 }
 
-func watches(dirs []string, filename string) bool {
+func watch(dirs, files []string, filename string) bool {
 	for _, dir := range dirs {
-		if contains(dir, filename) {
+		if in(dir, filename) {
+			return true
+		}
+	}
+	for _, file := range files {
+		if is(file, filename) {
 			return true
 		}
 	}
 	return false
 }
 
-func contains(dir, filename string) bool {
+func in(dir, filename string) bool {
 	return strings.Index(filename, dir) == 0
+}
+
+func is(file, filename string) bool {
+	return file == filename
 }

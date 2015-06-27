@@ -41,7 +41,7 @@ func TestWatch(t *testing.T) {
 	}
 
 	done := make(chan bool)
-	w := watcher.NewWatcher()
+	w := watcher.New()
 	go func() {
 		i := 0
 		for {
