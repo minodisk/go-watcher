@@ -35,6 +35,9 @@ func (w *Watcher) Watch(pathes []string) (err error) {
 	dirsMap := make(map[string]bool)
 	filesMap := make(map[string]bool)
 	for _, path := range pathes {
+		if path == "" {
+			continue
+		}
 		path, err = filepath.Abs(path)
 		if err != nil {
 			return err
